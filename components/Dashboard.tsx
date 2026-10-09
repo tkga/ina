@@ -13,9 +13,9 @@ const monthLabel = (k: string) => `${MONTHS[Number(k.slice(5, 7)) - 1]} ${k.slic
 const typeLabel = (v: string) => ORDER_TYPES.find((t) => t.value === v)?.label ?? v;
 
 export default async function Dashboard() {
-  const store = await getStore();
   let data;
   try {
+    const store = await getStore();
     const [orders, stock, finance] = await Promise.all([listItems("Orders", store), listItems("Stock", store), listItems("Finance", store)]);
     data = { orders, stock, finance };
   } catch (e) {
