@@ -9,6 +9,8 @@ import { baht, shortDate, todayIso } from "@/lib/format";
 import { CANCELLED, ORDER_TYPES } from "@/lib/schema";
 
 type Filter = "all" | "waiting" | "unpaid" | "done" | "cancelled";
+type TypeFilter = "all" | (typeof ORDER_TYPES)[number]["value"];
+const TYPE_ICON: Record<string, string> = { sell_pokemon: "🛒", hire_invite: "🤝", hire_farm: "🌾" };
 const typeLabel = (v: string) => ORDER_TYPES.find((t) => t.value === v)?.label ?? v;
 const ROUNDS = /^(\d+)\s*\/\s*(\d+)(.*)$/;
 
@@ -18,6 +20,7 @@ export default function OrdersView() {
   const stock = useSheet("Stock");
   const [q, setQ] = useState("");
   const [f, setF] = useState<Filter>("all");
+  const [t, setT] = useState<TypeFilter>("all");
   const [edit, setEdit] = useState<Item | "new" | null>(null);
   const [limit, setLimit] = useState(40);
 
@@ -26,6 +29,8 @@ export default function OrdersView() {
     setQ(p.get("q") ?? "");
     const ff = p.get("f");
     if (ff === "waiting" || ff === "unpaid" || ff === "done" || ff === "cancelled") setF(ff);
+    const tt = p.get("t");
+    if (ORDER_TYPES.some((x) => x.value === tt)) setT(tt as TypeFilter);
   }, []);
 
   const rows = useMemo(() => {
@@ -33,6 +38,7 @@ export default function OrdersView() {
     const needle = q.trim().toLowerCase();
     return all.filter((o) => {
       if (needle && !`${o.orderNo} ${o.customer} ${o.gameId} ${o.detail}`.toLowerCase().includes(needle)) return false;
+      if (t !== "all" && norm(o.type) !== t) return false;
       const cancelled = !!o.cancelled;
       switch (f) {
         case "waiting": return !cancelled && o.jobStatus === "waiting";
@@ -42,7 +48,13 @@ export default function OrdersView() {
         default: return true;
       }
     });
-  }, [orders.items, q, f]);
+  }, [orders.items, q, f, t]);
+
+  const typeCount = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const o of orders.items ?? []) m.set(norm(o.type), (m.get(norm(o.type)) ?? 0) + 1);
+    return m;
+  }, [orders.items]);
 
   const reloadAll = () => Promise.all([orders.reload(), customers.reload(), stock.reload()]);
 
@@ -51,6 +63,14 @@ export default function OrdersView() {
       <PageHead title="ออเดอร์" sub={orders.items ? `${orders.items.length} ออเดอร์` : undefined} action={<Button onClick={() => setEdit("new")}>+ เพิ่มออเดอร์</Button>} />
       <div className="mb-3 space-y-2">
         <TextInput type="search" placeholder="ค้นหาชื่อลูกค้า ไอดีเกม เลขออเดอร์ หรือรายละเอียด" value={q} onChange={(e) => { setQ(e.target.value); setLimit(40); }} aria-label="ค้นหาออเดอร์" />
+        <Segmented<TypeFilter>
+          value={t}
+          onChange={(v) => { setT(v); setLimit(40); }}
+          options={[
+            { value: "all", label: "ทุกประเภท" },
+            ...ORDER_TYPES.map((x) => ({ value: x.value, label: `${TYPE_ICON[x.value] ?? ""} ${x.label} (${typeCount.get(x.value) ?? 0})` })),
+          ]}
+        />
         <Segmented<Filter>
           value={f}
           onChange={(v) => { setF(v); setLimit(40); }}
@@ -67,7 +87,7 @@ export default function OrdersView() {
       {!orders.items ? (
         <Loading error={orders.error} />
       ) : rows.length === 0 ? (
-        <Empty text={q || f !== "all" ? "ไม่พบออเดอร์ที่ตรงกับตัวกรอง" : "ยังไม่มีออเดอร์"} action={<Button onClick={() => setEdit("new")}>เพิ่มออเดอร์แรก</Button>} />
+        <Empty text={q || f !== "all" || t !== "all" ? "ไม่พบออเดอร์ที่ตรงกับตัวกรอง" : "ยังไม่มีออเดอร์"} action={<Button onClick={() => setEdit("new")}>เพิ่มออเดอร์แรก</Button>} />
       ) : (
         <ul className="space-y-2">
           {rows.slice(0, limit).map((o) => {
@@ -80,7 +100,9 @@ export default function OrdersView() {
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
                       <span className="num font-medium text-ink">{norm(o.orderNo)}</span>
-                      <span>{typeLabel(norm(o.type))}</span>
+                      <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium text-ink">
+                        {TYPE_ICON[norm(o.type)] ?? ""} {typeLabel(norm(o.type))}
+                      </span>
                       <span>· {shortDate(o.date)}</span>
                     </span>
                     <span className="mt-0.5 block truncate text-base font-semibold">{norm(o.customer)}</span>
