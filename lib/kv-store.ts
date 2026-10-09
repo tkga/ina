@@ -2,14 +2,14 @@
 import type { Cell, SheetName } from "./schema";
 import { DocStore } from "./doc-store";
 
-/** หาค่า URL/Token ของ Redis จากตัวแปรที่ Vercel ใส่ให้ (ชื่อขึ้นต้นต่างกันได้) */
-export function kvEnv(): { url: string; token: string } | null {
-  for (const key of Object.keys(process.env)) {
-    const m = key.match(/^(.*)(REST_API_URL|REDIS_REST_URL)$/);
-    if (!m) continue;
-    const url = process.env[key];
-    const token = process.env[`${m[1]}${m[2].replace("URL", "TOKEN")}`];
-    if (url && token) return { url, token };
+/** หาค่า URL/Token ของ Redis จากตัวแปรที่ Vercel ใส่ให้ (ชื่อขึ้นต้นต่างกันได้ เช่น KV_ / UPSTASH_ / STORAGE_) */
+export function kvEnv(env: Record<string, string | undefined> = process.env): { url: string; token: string } | null {
+  for (const key of Object.keys(env)) {
+    if (!/URL$/.test(key) || /READ_ONLY/.test(key)) continue;
+    const url = env[key];
+    if (!url || !/^https:\/\//.test(url)) continue; // ข้าง redis:// ไม่ใช้ ต้องเป็นแบบ REST (https)
+    const token = env[key.replace(/URL$/, "TOKEN")];
+    if (token) return { url, token };
   }
   return null;
 }
