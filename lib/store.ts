@@ -6,7 +6,7 @@ export interface RawRow {
 }
 
 export interface Store {
-  readonly kind: "sheets" | "file";
+  readonly kind: "sheets" | "file" | "kv";
   /** อ่านทุกแถวข้อมูล (ข้ามแถวว่าง) */
   readAll(sheet: SheetName): Promise<RawRow[]>;
   /** เพิ่มแถวท้ายตาราง คืนเลขแถวที่เพิ่ม */
@@ -24,9 +24,20 @@ export async function getStore(): Promise<Store> {
   if (process.env.STORE === "file" && process.env.NODE_ENV !== "production") {
     const { FileStore } = await import("./file-store");
     cached = new FileStore();
-  } else {
+  } else if (process.env.GOOGLE_SHEET_ID) {
+    // ถ้าตั้งค่า Google Sheets ไว้ ใช้ Google Sheets
     const { SheetsStore } = await import("./sheets-store");
     cached = SheetsStore.fromEnv();
+  } else {
+    // ไม่งั้นใช้ Redis ที่เชื่อมจาก Vercel > Storage
+    const { KvStore, kvEnv } = await import("./kv-store");
+    const env = kvEnv();
+    if (!env) {
+      throw new Error(
+        "ยังไม่ได้เชื่อมที่เก็บข้อมูล — ที่ Vercel เปิดแท็บ Storage แล้วสร้าง Upstash Redis เชื่อมกับโปรเจกต์นี้ จากนั้น Redeploy (หรือจะตั้งค่า Google Sheets แทนก็ได้ ดู README)"
+      );
+    }
+    cached = new KvStore(env.url, env.token);
   }
   return cached;
 }
